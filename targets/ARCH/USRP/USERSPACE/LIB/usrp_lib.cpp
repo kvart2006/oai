@@ -172,12 +172,43 @@ static void trx_usrp_end(openair0_device *device)
 */ 
 static int trx_usrp_write(openair0_device *device, openair0_timestamp timestamp, void **buff, int nsamps, int cc, int flags)
 {
-  int ret;
+  int ret=0, ret_i=0;
   usrp_state_t *s = (usrp_state_t*)device->priv;
 
   s->tx_md.time_spec = uhd::time_spec_t::from_ticks(timestamp, s->sample_rate);
+  int sample_current=0;
+  int nsamps_temp=0;
+  while(sample_current < nsamps){
+    s->tx_md.time_spec = uhd::time_spec_t::from_ticks(timestamp + sample_current, s->sample_rate);
+    if(flags)
+      s->tx_md.has_time_spec = true;
+    else
+      s->tx_md.has_time_spec = false;
 
-  
+    if(nsamps - sample_current < device->openair0_cfg->samples_per_packet ){
+       nsamps_temp = nsamps - sample_current;
+    }else{
+       nsamps_temp = device->openair0_cfg->samples_per_packet;
+    }
+
+    if (cc>1) {
+      std::vector<void *> buff_ptrs;
+      for (int i=0;i<cc;i++) buff_ptrs.push_back((int32_t *)buff[i] + sample_current);
+      ret_i = (int)s->tx_stream->send(buff_ptrs, nsamps_temp, s->tx_md,1e-3);
+    }
+    else
+      ret_i = (int)s->tx_stream->send((int32_t *)buff[0] + sample_current, nsamps_temp, s->tx_md,1e-3);
+
+    sample_current = sample_current + device->openair0_cfg->samples_per_packet;
+
+    if (ret_i != nsamps_temp) {
+      printf("[xmit] tx samples %d != %d\n",ret_i,nsamps_temp);
+    }
+    ret = ret+ret_i;
+
+  };
+
+/*
   if(flags)
     s->tx_md.has_time_spec = true;
   else
@@ -190,6 +221,7 @@ static int trx_usrp_write(openair0_device *device, openair0_timestamp timestamp,
   }
   else
     ret = (int)s->tx_stream->send(buff[0], nsamps, s->tx_md,1e-3);
+*/
 
   s->tx_md.start_of_burst = false;
 
@@ -500,6 +532,7 @@ extern "C" {
     
     // Initialize USRP device
 
+  device->openair0_cfg = openair0_cfg;
 
   std::string args = "type=b200";
 
@@ -611,30 +644,35 @@ extern "C" {
     switch ((int)openair0_cfg[0].sample_rate) {
     case 30720000:
       s->usrp->set_master_clock_rate(30.72e6);
+      openair0_cfg[0].samples_per_packet    = 2048;
       openair0_cfg[0].tx_sample_advance     = 115;
       openair0_cfg[0].tx_bw                 = 20e6;
       openair0_cfg[0].rx_bw                 = 20e6;
       break;
     case 23040000:
       s->usrp->set_master_clock_rate(23.04e6); //to be checked
+      openair0_cfg[0].samples_per_packet    = 2048;
       openair0_cfg[0].tx_sample_advance     = 113;
       openair0_cfg[0].tx_bw                 = 20e6;
       openair0_cfg[0].rx_bw                 = 20e6;
       break;
     case 15360000:
       s->usrp->set_master_clock_rate(30.72e06);
+      openair0_cfg[0].samples_per_packet    = 2048;
       openair0_cfg[0].tx_sample_advance     = 103; 
       openair0_cfg[0].tx_bw                 = 20e6;
       openair0_cfg[0].rx_bw                 = 20e6;
       break;
     case 7680000:
       s->usrp->set_master_clock_rate(30.72e6);
+      openair0_cfg[0].samples_per_packet    = 2048;
       openair0_cfg[0].tx_sample_advance     = 80;
       openair0_cfg[0].tx_bw                 = 20e6;
       openair0_cfg[0].rx_bw                 = 20e6;
       break;
     case 1920000:
       s->usrp->set_master_clock_rate(30.72e6);
+      openair0_cfg[0].samples_per_packet    = 2048;
       openair0_cfg[0].tx_sample_advance     = 40;
       openair0_cfg[0].tx_bw                 = 20e6;
       openair0_cfg[0].rx_bw                 = 20e6;
